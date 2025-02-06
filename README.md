@@ -24,6 +24,5 @@
     - [ ] Green (informational notes)  
     - [ ] Yellow (cautionary notes)  
     - [ ] Red (danger alerts)  
-    - [ ] Orange (potentially important but not critical warnings)  
-  - [ ] Ensure published pages are not moderated  
+    - [ ] Orange (potentially important but not critical warnings)
   - [ ] Add a reporting system for inappropriate content  
