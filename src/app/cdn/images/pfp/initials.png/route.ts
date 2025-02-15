@@ -32,7 +32,6 @@ export async function GET(req: NextRequest) {
     const user = await getSession(req.cookies.get("session")?.value || "");
     const fullName = user?.username || "John Doe"
 
-    console.log(fullName)
 
   const initials =
     fullName

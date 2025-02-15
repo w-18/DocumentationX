@@ -16,7 +16,7 @@ type Session = {
   iat: number;
   exp: number;
 }
-// Props for the DropdownItem component.
+
 interface DropdownItemProps {
   children: React.ReactNode;
   onClick: () => void;
@@ -31,8 +31,7 @@ const DropdownItem: React.FC<DropdownItemProps> = ({ children, onClick }) => (
   </div>
 );
 
-export default function Func(){
-  // Cast the result from useSession so that TypeScript knows the shape.
+export default function Func() {
   const { session, loading } = useSession() as {
     session: Session | null;
     loading: boolean;
@@ -40,7 +39,6 @@ export default function Func(){
   const router = useRouter();
   const [isMinimal, setIsMinimal] = useState<boolean>(false);
   const [showDropdown, setShowDropdown] = useState<boolean>(false);
-  // Use appropriate types for refs.
   const dropdownRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<number | null>(null);
 
@@ -64,6 +62,7 @@ export default function Func(){
   const handleDropdownHover = (show: boolean) => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
     }
     if (show) {
       setShowDropdown(true);
@@ -106,45 +105,35 @@ export default function Func(){
             </span>
           </div>
 
-          {showDropdown && (
-            <div
-              className="absolute right-0 top-10 w-48 bg-white/10 rounded-xl backdrop-blur-sm shadow-xl"
-              onMouseEnter={() => handleDropdownHover(true)}
-              onMouseLeave={() => handleDropdownHover(false)}
-            >
-              <div className="p-3 border-b border-gray-700 flex items-center gap-2">
-                {session.pfp_url && (
-                  <div className="text-white bg-white">sfdgdfg
-
-                  <img
-                    src={session.pfp_url}
-                    alt="Profile Picture"
-                    className="w-10 h-10 rounded-full"
-                  />
-                  </div>
-                )}
-                <div>
-                  <p className="text-white font-medium">
-                    {session.username.split("@")[0]}
-                  </p>
-                  <p className="text-gray-400 text-sm font-bold">
-                    Auth: {session.auth_service}
-                  </p>
-                </div>
-              </div>
-              <div className="p-1.5">
-                <DropdownItem onClick={() => router.push("/profile")}>
-                  Profile
-                </DropdownItem>
-                <DropdownItem onClick={() => router.push("/settings")}>
-                  Settings
-                </DropdownItem>
-                <DropdownItem onClick={() => router.push("/logout")}>
-                  Log Out
-                </DropdownItem>
+          <div
+            className={`absolute right-0 top-10 w-48 bg-white/10 rounded-xl backdrop-blur-sm shadow-xl transition-opacity duration-100 ${
+              showDropdown ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+            }`}
+            onMouseEnter={() => handleDropdownHover(true)}
+            onMouseLeave={() => handleDropdownHover(false)}
+          >
+            <div className="p-3 border-b border-gray-700">
+              <div>
+                <p className="text-white font-medium">
+                  {session.username.split("@")[0]}
+                </p>
+                <p className="text-gray-400 text-sm font-bold">
+                  Auth: {session.auth_service}
+                </p>
               </div>
             </div>
-          )}
+            <div className="p-1.5">
+              <DropdownItem onClick={() => router.push("/profile")}>
+                Profile
+              </DropdownItem>
+              <DropdownItem onClick={() => router.push("/settings")}>
+                Settings
+              </DropdownItem>
+              <DropdownItem onClick={() => router.push("/logout")}>
+                Log Out
+              </DropdownItem>
+            </div>
+          </div>
         </div>
       ) : (
         <button
