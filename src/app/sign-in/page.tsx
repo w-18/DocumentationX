@@ -1,7 +1,8 @@
 "use client";
 import { redirect, RedirectType } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { BsGithub, BsDiscord, BsGoogle } from "react-icons/bs";
+import { Turnstile, type TurnstileInstance } from "@marsidev/react-turnstile";
 
 const socialSignIns = [
   {
@@ -26,41 +27,88 @@ const socialSignIns = [
 
 export default function Page() {
   const [isSignIn, setIsSignIn] = useState(true);
-  // Form state
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-  // Error state
+  const captchaRef = useRef<TurnstileInstance | null>(null);
+  const [showCaptchaModal, setShowCaptchaModal] = useState(false);
+
   const [usernameError, setUsernameError] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [confirmPasswordError, setConfirmPasswordError] = useState("");
 
-  // Banner state to display success or error messages
   const [banner, setBanner] = useState<{
     message: string;
     type: "success" | "error";
   } | null>(null);
 
-  // Validation functions
   const validateUsername = (name: string) => {
-    // Must be 3-20 characters; letters, numbers, and underscores only.
     const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/;
     return usernameRegex.test(name);
   };
 
   const validatePassword = (pass: string) => {
-    // At least 8 characters, one uppercase, one lowercase, one digit, and one special character.
     const passwordRegex =
       /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#_])[A-Za-z\d@$!%*?&#_]{8,}$/;
     return passwordRegex.test(pass);
   };
 
-  const handleSubmit = async (event: React.FormEvent) => {
+  const submitWithCaptcha = async (token: string) => {
+    const params = new URLSearchParams({
+      username,
+      password,
+    });
+
+    if (!isSignIn) {
+      params.append("service", "native-n");
+    } else {
+      params.append("service", "native-r");
+    }
+
+    try {
+      const response = await fetch(`/api/v1/auth/callback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          s: params.get("service"),
+          u: params.get("username"),
+          p: params.get("password"),
+          c: token,
+        }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        setBanner({ message: "Authentication successful!", type: "success" });
+        setTimeout(() => redirect("/"), 1500);
+      } else if (result.error) {
+        setBanner({ message: result.error, type: "error" });
+      } else {
+        setBanner({
+          message: "Unexpected response from server.",
+          type: "error",
+        });
+      }
+    } catch (error) {
+      console.error("Error submitting form:", error);
+      setBanner({
+        message: "Error submitting form. Please try again later.",
+        type: "error",
+      });
+    }
+  };
+
+  const handleCaptchaSuccess = async (token: string) => {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    setShowCaptchaModal(false)
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await submitWithCaptcha(token);
+  };
+
+  const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     let valid = true;
 
-    // Final validation check before submission.
     if (!validateUsername(username)) {
       setUsernameError(
         "Username must be 3-20 characters and can only contain letters, numbers, and underscores."
@@ -88,54 +136,18 @@ export default function Page() {
 
     if (!valid) return;
 
-    // Build query parameters for the API call.
-    const params = new URLSearchParams({
-      username,
-      password,
-    });
-
-    if (!isSignIn) {
-      params.append("service", "native-n");
-    } else {
-      params.append("service", "native-r");
-    }
-
-    console.log("Submitting with params:", params.toString());
-    try {
-      const response = await fetch(`/api/v1/auth/callback`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify({
-          service: params.get("service"),
-          u: params.get("username"),
-          p: params.get("password"),
-        }),
-      });
-      const result = await response.json();
-      console.log(result);
-      if (result.success) {
-        setBanner({ message: "Authentication successful!", type: "success" });
-        setTimeout(() => redirect("/"), 1500)
-      } else if (result.error) {
-        setBanner({ message: result.error, type: "error" });
-      } else {
-        setBanner({
-          message: "Unexpected response from server.",
-          type: "error",
-        });
-      }
-    } catch (error) {
-      console.error("Error submitting form:", error);
-      setBanner({
-        message: "Error submitting form. Please try again later.",
-        type: "error",
-      });
-    }
+    setShowCaptchaModal(true);
   };
+
+  const areFieldsFilled = isSignIn
+    ? username.trim() !== "" && password.trim() !== ""
+    : username.trim() !== "" &&
+      password.trim() !== "" &&
+      confirmPassword.trim() !== "";
 
   return (
     <div className="min-h-screen flex items-center justify-center text-white">
-      <div className="w-full max-w-md p-8 bg-white/10 rounded-xl backdrop-blur-sm transition-all duration-300 hover:bg-white/15">
+      <div className="w-full max-w-md p-8 bg-white/10 rounded-xl backdrop-blur-sm transition-all duration-300 hover:bg-white/15 relative">
         {/* Banner */}
         {banner && (
           <div
@@ -157,7 +169,6 @@ export default function Page() {
               } transition-colors duration-300`}
               onClick={() => {
                 setIsSignIn(true);
-                // Reset errors and banner when switching tabs
                 setUsernameError("");
                 setPasswordError("");
                 setConfirmPasswordError("");
@@ -190,13 +201,10 @@ export default function Page() {
         </div>
 
         {/* Form */}
-        <form className="space-y-4" onSubmit={handleSubmit}>
+        <form className="space-y-5" onSubmit={handleSubmit}>
           {/* Username Field */}
           <div>
-            <label
-              htmlFor="username"
-              className="block text-sm font-medium mb-1"
-            >
+            <label htmlFor="username" className="block text-sm font-medium mb-1">
               Username
             </label>
             <input
@@ -207,28 +215,20 @@ export default function Page() {
               onChange={(e) => {
                 const value = e.target.value;
                 setUsername(value);
-                // Validate on change (real-time preview)
-                if (value === "" || !validateUsername(value)) {
-                  setUsernameError(
-                    "Username must be 3-20 characters and can only contain letters, numbers, and underscores."
-                  );
-                } else {
-                  setUsernameError("");
-                }
+                setUsernameError(
+                  value === "" || !validateUsername(value)
+                    ? "Username must be 3-20 characters and can only contain letters, numbers, and underscores."
+                    : ""
+                );
               }}
               className="w-full px-4 py-3 bg-transparent border border-gray-500 rounded-md focus:outline-none focus:border-blue-400 transition-colors duration-300"
             />
-            {usernameError && (
-              <p className="text-red-500 text-xs mt-1">{usernameError}</p>
-            )}
+            {usernameError && <p className="text-red-500 text-xs mt-1">{usernameError}</p>}
           </div>
 
           {/* Password Field */}
           <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium mb-1"
-            >
+            <label htmlFor="password" className="block text-sm font-medium mb-1">
               Password
             </label>
             <input
@@ -239,14 +239,11 @@ export default function Page() {
               onChange={(e) => {
                 const value = e.target.value;
                 setPassword(value);
-                if (value === "" || !validatePassword(value)) {
-                  setPasswordError(
-                    "Password must be at least 8 characters long, and include uppercase, lowercase, number, and special character."
-                  );
-                } else {
-                  setPasswordError("");
-                }
-                // For sign-up mode, validate confirm password in real time
+                setPasswordError(
+                  value === "" || !validatePassword(value)
+                    ? "Password must be at least 8 characters long, and include uppercase, lowercase, number, and special character."
+                    : ""
+                );
                 if (!isSignIn && confirmPassword && value !== confirmPassword) {
                   setConfirmPasswordError("Passwords do not match.");
                 } else {
@@ -255,53 +252,40 @@ export default function Page() {
               }}
               className="w-full px-4 py-3 bg-transparent border border-gray-500 rounded-md focus:outline-none focus:border-blue-400 transition-colors duration-300"
             />
-            {passwordError && (
-              <p className="text-red-500 text-xs mt-1">{passwordError}</p>
-            )}
+            {passwordError && <p className="text-red-500 text-xs mt-1">{passwordError}</p>}
           </div>
 
           {/* Confirm Password (Sign Up Only) */}
-          <div
-            className={`overflow-hidden transition-all duration-300 ${
-              isSignIn ? "max-h-0 opacity-0" : "max-h-[100px] opacity-100"
-            }`}
-          >
-            {!isSignIn && (
-              <div>
-                <label
-                  htmlFor="confirmPassword"
-                  className="block text-sm font-medium mb-1"
-                >
-                  Confirm Password
-                </label>
-                <input
-                  type="password"
-                  id="confirmPassword"
-                  placeholder="••••••••"
-                  value={confirmPassword}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setConfirmPassword(value);
-                    if (password !== value) {
-                      setConfirmPasswordError("Passwords do not match.");
-                    } else {
-                      setConfirmPasswordError("");
-                    }
-                  }}
-                  className="w-full px-4 py-3 bg-transparent border border-gray-500 rounded-md focus:outline-none focus:border-blue-400 transition-colors duration-300"
-                />
-                {confirmPasswordError && (
-                  <p className="text-red-500 text-xs mt-1">
-                    {confirmPasswordError}
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
+          {!isSignIn && (
+            <div className="transition-all duration-300">
+              <label htmlFor="confirmPassword" className="block text-sm font-medium mb-1">
+                Confirm Password
+              </label>
+              <input
+                type="password"
+                id="confirmPassword"
+                placeholder="••••••••"
+                value={confirmPassword}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setConfirmPassword(value);
+                  setConfirmPasswordError(password !== value ? "Passwords do not match." : "");
+                }}
+                className="w-full px-4 py-3 bg-transparent border border-gray-500 rounded-md focus:outline-none focus:border-blue-400 transition-colors duration-300"
+              />
+              {confirmPasswordError && (
+                <p className="text-red-500 text-xs mt-1">{confirmPasswordError}</p>
+              )}
+            </div>
+          )}
 
+          {/* Submit Button */}
           <button
             type="submit"
-            className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-lg font-semibold rounded-xl transition-all duration-300 transform hover:scale-105"
+            disabled={!areFieldsFilled}
+            className={`w-full py-3 bg-blue-600 hover:bg-blue-700 text-lg font-semibold rounded-xl transition-all duration-300 transform hover:scale-105 ${
+              !areFieldsFilled ? "opacity-50 cursor-not-allowed" : ""
+            }`}
           >
             {isSignIn ? "Sign In" : "Create Account"}
           </button>
@@ -329,6 +313,27 @@ export default function Page() {
           ))}
         </div>
       </div>
+
+      {/* Captcha Modal */}
+      {showCaptchaModal && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm z-50">
+          <div className="w-full max-w-md p-8 bg-white/10 rounded-xl backdrop-blur-sm transition-all duration-300 hover:bg-white/15 relative">
+            <button
+              onClick={() => setShowCaptchaModal(false)}
+              className="absolute top-2 right-2 text-gray-700 text-xl font-bold"
+            >
+              &times;
+            </button>
+          <div className="flex justify-center">
+          <Turnstile
+              siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}
+              options={{ size: "normal", theme: "dark" }}
+              onSuccess={(a) => {handleCaptchaSuccess(a)}}
+              ref={captchaRef}
+            /> </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

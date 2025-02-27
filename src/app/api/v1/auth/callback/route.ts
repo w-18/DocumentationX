@@ -7,11 +7,8 @@ import getGithubUserInfo from "@/OAuth2-functions/github";
 import getDiscordUserInfo from "@/OAuth2-functions/discord";
 import getGoogleUserInfo from "@/OAuth2-functions/google";
 import GenerateGoogleUsername from "@/functions/generate-google-username";
-import { Captcha } from "@/classes/captcha";
 import { invalidCaptcha } from "@/responses/responses";
-
-const captcha = new Captcha({siteKey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!, secretKey: process.env.TURNSTILE_PRIVATE_KEY!})
-
+import { captcha } from "@/handlers/captcha";
 const invalidParametersResponse = NextResponse.json(
   { error: "Invalid parameters!" },
   { status: 400 }
@@ -191,7 +188,7 @@ export async function POST(req: NextRequest) {
         if (!username || !password) {
           return invalidParametersResponse;
         }
-        if(!( await captcha.verify(captchaToken, ip || ""))) return invalidCaptcha()
+        if(!( await captcha.verify({captchaResponse: captchaToken, remoteIp: ip}))) return invalidCaptcha()
         const isValidUsername = /^[a-zA-Z0-9_]{3,32}$/.test(username);
         if (!isValidUsername) {
           return NextResponse.json(
@@ -238,7 +235,7 @@ export async function POST(req: NextRequest) {
         if (!username || !password) {
           return invalidParametersResponse;
         }
-        if(!( await captcha.verify(captchaToken, ip || ""))) return invalidCaptcha()
+        if(!( await captcha.verify({captchaResponse: captchaToken, remoteIp: ip}))) return invalidCaptcha()
 
         const isValidUsername = /^[a-zA-Z0-9_]{3,32}$/.test(username);
         if (!isValidUsername) {

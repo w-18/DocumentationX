@@ -4,19 +4,19 @@ type CaptchaConstructorInput = {
     secretKey: string;
 }
 export class Captcha {
-    siteKey: string;
-    secretKey: string;
+    private siteKey: string;
+    private secretKey: string;
     public constructor ({siteKey, secretKey}: CaptchaConstructorInput) {
         this.siteKey = siteKey;
         this.secretKey = secretKey;
     }
 
-    public async verify (captchaResponse: string, remoteIp: string) {
+    public async verify ({captchaResponse, remoteIp}: {captchaResponse: string, remoteIp: string | null}) {
          const verificationUrl = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
         const formData = new FormData()
         formData.append("secret", this.secretKey);
         formData.append("response", captchaResponse);
-        formData.append("remoteIp", remoteIp)
+        formData.append("remoteIp", remoteIp || "")
          const results = await fetch(verificationUrl, {
             body: formData,
             method: "POST"
